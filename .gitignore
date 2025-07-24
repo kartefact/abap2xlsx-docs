@@ -1,4 +1,6 @@
 *node_modules
 folder-structure.txt
-*.vitepress/dist*
-*.vitepress/cache*
+*.vitepress/dist/*
+*.vitepress/cache/*
+*/.vitepress/dist/*
+*/.vitepress/cache/*
