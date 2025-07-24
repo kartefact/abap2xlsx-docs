@@ -4,7 +4,7 @@ export default defineConfig({
   ignoreDeadLinks: true, // Ignores all dead links during build
   title: 'abap2xlsx Documentation',
   description: 'Documentation for abap2xlsx, a library for generating and manipulating Excel files in ABAP.',
-  base: '/docs/',
+  base: '/abap2xlsx-docs/',
   themeConfig: {
     logo: '/docs/public/logo.png',
     editLink: {
