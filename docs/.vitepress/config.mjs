@@ -36,7 +36,7 @@ export default defineConfig({
       },
       {
         text: 'Guide',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Basic Usage', link: '/guide/basic-usage' },
           { text: 'ALV Integration', link: '/guide/alv-integration' },
@@ -52,7 +52,7 @@ export default defineConfig({
       },
       {
         text: 'Advanced',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Automation', link: '/advanced/automation' },
           { text: 'Conditional Formatting', link: '/advanced/conditional-formatting' },
@@ -66,7 +66,7 @@ export default defineConfig({
       },
       {
         text: 'API Reference',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'ZCL_EXCEL', link: '/api/zcl-excel' },
           { text: 'ZCL_EXCEL_READER', link: '/api/zcl-excel-reader' },
@@ -78,7 +78,7 @@ export default defineConfig({
       },
       {
         text: 'Examples',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Basic Report', link: '/examples/basic-report' },
           { text: 'Batch Processing', link: '/examples/batch-processing' },
@@ -89,7 +89,7 @@ export default defineConfig({
       },
       {
         text: 'Contributing',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Coding Guidelines', link: '/contributing/coding-guidelines' },
           { text: 'Development Setup', link: '/contributing/development-setup' },
@@ -100,7 +100,7 @@ export default defineConfig({
       },
       {
         text: 'Troubleshooting',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Common Issues', link: '/troubleshooting/common-issues' },
           { text: 'Debugging', link: '/troubleshooting/debugging' },
@@ -110,7 +110,7 @@ export default defineConfig({
       },
       {
         text: 'Migration',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'Breaking Changes', link: '/migration/breaking-changes' },
           { text: 'From SAPLink', link: '/migration/from-saplink' },
@@ -119,7 +119,7 @@ export default defineConfig({
       },
       {
         text: 'Legacy Documentation',
-        collapsed: false,
+        collapsed: true,
         items: [
           { text: 'abap2xlsx Calendar Gallery', link: '/legacy-docs/abap2xlsx-Calender-Gallery' },
           { text: 'abapGit Installation', link: '/legacy-docs/abapGit-installation' },
