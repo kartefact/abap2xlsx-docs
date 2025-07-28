@@ -1,8 +1,3 @@
-I'll continue with the next file in the documentation structure. Here's the data conversion guide:
-
-## `docs/guide/data-conversion.md`
-
-```markdown
 # Data Conversion
 
 Comprehensive guide to converting ABAP data structures to Excel format with abap2xlsx.
