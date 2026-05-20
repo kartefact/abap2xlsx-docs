@@ -41,6 +41,7 @@ export default defineConfig({
           { text: 'Basic Usage', link: '/guide/basic-usage' },
           { text: 'ALV Integration', link: '/guide/alv-integration' },
           { text: 'Charts', link: '/guide/charts' },
+          { text: 'Cloud Compatibility', link: '/guide/cloud-compatibility' },
           { text: 'Data Conversion', link: '/guide/data-conversion' },
           { text: 'Formatting', link: '/guide/formatting' },
           { text: 'Formulas', link: '/guide/formulas' },
@@ -48,6 +49,7 @@ export default defineConfig({
           { text: 'Performance', link: '/guide/performance' },
           { text: 'Reading Excel', link: '/guide/reading-excel' },
           { text: 'Worksheets', link: '/guide/worksheets' },
+          { text: 'Changelog', link: '/guide/changelog' },
         ],
       },
       {

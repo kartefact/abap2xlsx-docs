@@ -86,7 +86,7 @@ lo_iterator = lo_worksheets->get_iterator( ).
 WHILE lo_iterator->has_next( ) = abap_true.
   lo_worksheet = lo_iterator->get_next( ).
   WRITE: / 'Processing worksheet:', lo_worksheet->get_title( ).
-  
+
   " Process each worksheet
   " Your worksheet-specific logic here
 ENDWHILE.
@@ -135,7 +135,7 @@ lo_worksheet->freeze_panes( ip_num_rows = 1 ip_num_columns = 1 ).
 lo_worksheet->freeze_panes( ip_num_rows = 3 ip_num_columns = 2 ).
 
 " Split panes (alternative to freeze)
-lo_worksheet->set_split_panes( 
+lo_worksheet->set_split_panes(
   ip_x_split = 2000  " Horizontal split position
   ip_y_split = 1000  " Vertical split position
 ).
@@ -209,13 +209,82 @@ LOOP AT lv_columns INTO lv_col_alpha.
 ENDLOOP.
 ```
 
+## Cell Comments
+
+### Adding Comments to Cells
+
+```abap
+" Add a comment to a cell
+DATA: lo_comment TYPE REF TO zcl_excel_comment.
+
+lo_comment = lo_worksheet->add_new_comment( ).
+lo_comment->set_text( ip_value = 'This is an important note.' ).
+lo_comment->set_author( 'Karthikeyan' ).
+lo_comment->set_ref( ip_column = 'B' ip_row = 3 ).
+```
+
+### Comment Box Positioning — Updated API (2025-06)
+
+> **Breaking change in Jun 2025 (PR [#1316](https://github.com/abap2xlsx/abap2xlsx/pull/1316)):** The eight individual comment box geometry attributes have been consolidated into a **single structure** `ms_box` of type `zcl_excel_comment=>ty_box`. If you were setting these attributes individually before June 2025, update your code as shown below.
+
+**Before (pre-Jun 2025):**
+```abap
+" Old API — individual attributes, no longer exists
+lo_comment->bottom_offset = 1.
+lo_comment->bottom_row    = 7.
+lo_comment->left_column   = 2.
+lo_comment->left_offset   = 15.
+lo_comment->right_column  = 4.
+lo_comment->right_offset  = 10.
+lo_comment->top_offset    = 2.
+lo_comment->top_row       = 2.
+```
+
+**After (Jun 2025+):**
+```abap
+" New API — ms_box structure
+DATA: ls_box TYPE zcl_excel_comment=>ty_box.
+
+" Use the built-in default constant as a starting point
+ls_box = zcl_excel_comment=>mc_box_default.
+
+" Override only the fields you need
+ls_box-bottom_row   = 7.
+ls_box-right_column = 4.
+ls_box-top_row      = 2.
+ls_box-left_column  = 2.
+
+lo_comment->ms_box = ls_box.
+```
+
+The `mc_box_default` constant provides sensible defaults for all eight fields so you only need to override the values that differ from the standard position.
+
+### Reading Comments — Copy Semantics
+
+> **Updated in Jun 2025 (PR [#1317](https://github.com/abap2xlsx/abap2xlsx/pull/1317)):** `get_comments()` now returns a **copy** of the internal comments collection. Modifications to the returned object do not affect the worksheet's live state.
+
+```abap
+" Read comments — returns a copy
+DATA: lo_comments TYPE REF TO zcl_excel_comments,
+      lo_comment  TYPE REF TO zcl_excel_comment.
+
+lo_comments = lo_worksheet->get_comments( ).
+
+lo_comment = lo_comments->get_comment( ip_column = 'B' ip_row = 3 ).
+IF lo_comment IS BOUND.
+  WRITE: / 'Comment text:', lo_comment->get_text( ).
+ENDIF.
+```
+
+The copy constructor for `zcl_excel_worksheet` also now correctly carries the comments collection when a worksheet is duplicated.
+
 ## Worksheet Protection
 
 ### Protecting Worksheets
 
 ```abap
 " Protect worksheet with password
-lo_worksheet->set_protection( 
+lo_worksheet->set_protection(
   ip_password = 'mypassword'
   ip_sheet = abap_true
   ip_objects = abap_true
@@ -246,11 +315,11 @@ lo_style = lo_excel->add_new_style( ).
 lo_style->protection->locked = abap_false.
 
 " Apply to specific cells that should remain editable
-lo_worksheet->set_cell( 
-  ip_column = 'B' 
-  ip_row = 5 
+lo_worksheet->set_cell(
+  ip_column = 'B'
+  ip_row = 5
   ip_value = 'Editable Cell'
-  ip_style = lo_style 
+  ip_style = lo_style
 ).
 ```
 
@@ -265,11 +334,11 @@ DATA: lo_header_footer TYPE REF TO zcl_excel_header_footer.
 lo_header_footer = lo_worksheet->get_header_footer( ).
 
 " Set header sections
-lo_header_footer->set_odd_header( 
-  '&L&"Arial,Bold"Company Name&C&"Arial"Sales Report&R&D' 
+lo_header_footer->set_odd_header(
+  '&L&"Arial,Bold"Company Name&C&"Arial"Sales Report&R&D'
 ).
 
-" Set footer sections  
+" Set footer sections
 lo_header_footer->set_odd_footer(
   '&LConfidential&C&P of &N&R&T'
 ).
@@ -361,24 +430,24 @@ lo_data_validation->set_error( 'Please select a valid region from the dropdown.'
 METHOD populate_worksheet_efficiently.
   " 1. Minimize worksheet switches
   " Process all data for one worksheet before moving to next
-  
+
   " 2. Use table binding for large datasets
   lo_worksheet->bind_table( ip_table = lt_large_data ).
-  
+
   " 3. Set styles once, reuse multiple times
   DATA(lo_header_style) = lo_excel->add_new_style( ).
   " Configure style once
-  
+
   " Apply to multiple cells
   LOOP AT lt_headers INTO DATA(ls_header).
-    lo_worksheet->set_cell( 
+    lo_worksheet->set_cell(
       ip_column = ls_header-column
       ip_row = 1
       ip_value = ls_header-text
       ip_style = lo_header_style
     ).
   ENDLOOP.
-  
+
   " 4. Clear objects when done
   CLEAR: lo_worksheet, lo_header_style.
 ENDMETHOD.
@@ -392,6 +461,8 @@ After mastering worksheet management:
 - **[Excel Formulas](/guide/formulas)** - Add calculations across worksheets
 - **[Charts and Graphs](/guide/charts)** - Create visual representations
 - **[Data Conversion](/guide/data-conversion)** - Efficiently populate worksheets with ABAP data
+- **[Reading Excel](/guide/reading-excel)** - Read back and process existing workbooks
+- **[Changelog](/guide/changelog)** - Full history of recent changes
 
 ## Common Worksheet Patterns
 
@@ -403,15 +474,15 @@ METHOD create_multi_sheet_report.
   " Sheet 1: Executive Summary
   DATA(lo_summary) = lo_excel->add_new_worksheet( ).
   lo_summary->set_title( 'Executive Summary' ).
-  
+
   " Sheet 2: Detailed Data
   DATA(lo_details) = lo_excel->add_new_worksheet( ).
   lo_details->set_title( 'Detailed Data' ).
-  
+
   " Sheet 3: Charts and Analysis
   DATA(lo_charts) = lo_excel->add_new_worksheet( ).
   lo_charts->set_title( 'Analysis' ).
-  
+
   " Configure each sheet appropriately
   setup_summary_sheet( lo_summary ).
   setup_details_sheet( lo_details ).
