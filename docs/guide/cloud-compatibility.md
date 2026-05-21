@@ -1,83 +1,111 @@
-# Cloud Compatibility (S/4HANA Cloud & BTP ABAP)
+# Cloud Compatibility
 
-This page documents the ongoing effort to make abap2xlsx fully compatible with **SAP S/4HANA Cloud** (ABAP Environment / Steampunk) and **SAP BTP ABAP Environment**, where classic on-premise ABAP syntax is restricted.
+abap2xlsx is designed to work on **SAP BTP ABAP Environment**, **S/4HANA Public Cloud**, and
+all classic on-premise ABAP stacks. This guide explains which parts of the library require
+classic ABAP and which are cloud-safe.
 
-## What Is the Cloud Compatibility Track?
+## The `not_cloud` Package
 
-Abap2xlsx has historically relied on a small number of classic ABAP language features and built-in variables that are not available in the ABAP Cloud programming model. The maintainers have been systematically removing these dependencies.
+Classes that depend on classic ABAP APIs are isolated in the **`src/not_cloud/`** package.
+Do **not** install this package on cloud systems.
 
-Cloud-restricted constructs that have been removed or replaced:
+### `not_cloud` Class Inventory
 
-| Removed construct | Replaced with | PR | Merged |
-|---|---|---|---|
-| `DESCRIBE TABLE ... LINES` | `lines( )` built-in function | [#1340](https://github.com/abap2xlsx/abap2xlsx/pull/1340) | Jan 2026 |
-| `STRTABLE` / `SSTRTABLE` type references | Standard string/table types | [#1336](https://github.com/abap2xlsx/abap2xlsx/pull/1336) | Sep 2025 |
-| `SCRTEXT_S/M/L` (screen-text types) | `string` | [#1337](https://github.com/abap2xlsx/abap2xlsx/pull/1337) | Sep 2025 |
-| `SEOCLSNAME` type references | `string` | [#1331](https://github.com/abap2xlsx/abap2xlsx/pull/1331) | Aug 2025 |
-| `SY-LANGU` / `LANG` system field | `cl_abap_context_info=>get_system_language( )` | [#1313](https://github.com/abap2xlsx/abap2xlsx/pull/1313) | Jun 2025 |
-| `IHTTPNVP` type references | `string` | [#1312](https://github.com/abap2xlsx/abap2xlsx/pull/1312) | Jun 2025 |
-| `TDCWIDTHS` type references | `i` (integer) | [#1311](https://github.com/abap2xlsx/abap2xlsx/pull/1311) | May 2025 |
+| Class | Depends on | Alternative |
+|---|---|---|
+| `zcl_excel_converter` | `DDIF_FIELDINFO_GET`, `DESCRIBE TABLE LINES` | `bind_table` + `zcl_excel_worksheet` |
+| `zcl_excel_converter_alv` | `LVC_*` ALV APIs | `bind_table` with manual field catalogue |
+| `zcl_excel_converter_alv_grid` | `CL_GUI_ALV_GRID` | `CL_SALV_TABLE` + `zcl_excel_converter_salv_table` |
+| `zcl_excel_converter_salv_table` | `CL_SALV_TABLE` model APIs | Cloud ALV (`cl_grid_display_salv`, future) |
+| `zcl_excel_converter_salv_model` | `CL_SALV_*` | Same as above |
+| `zcl_excel_converter_result_wd` | `CL_WD_RUNTIME_SERVICES` | OData/REST file download |
+| `zcl_excel_ole` | `CL_GUI_FRONTEND_SERVICES`, OLE/COM | Server-side writer + HTTP download |
+| `zexcel_template_get_types` | `DESCRIBE TABLE COMPONENTS` | Manual structure inspection |
 
-## Deployment Notes
+See **[ALV Converter and OLE](/guide/alv-converter)** for full usage documentation on all
+`not_cloud` classes.
 
-### Classic On-Premise (ECC, S/4HANA On-Premise)
+## What Changed for Cloud Compatibility
 
-No changes required. All replacements above are backward-compatible with relevant on-premise ABAP releases.
+The following statements were removed from the main `src/` package classes and replaced
+with cloud-compatible equivalents:
 
-### S/4HANA Cloud / BTP ABAP Environment
+| Removed statement | Replacement |
+|---|---|
+| `DESCRIBE TABLE lt_data LINES lv_count` | `lv_count = lines( lt_data )` |
+| `DATA: lt_strtab TYPE STRTABLE` | `DATA: lt_strtab TYPE string_table` |
+| `DATA: lt_sstrtab TYPE SSTRTABLE` | `DATA: lt_sstrtab TYPE string_table` |
+| `DATA: lv_text TYPE SCRTEXT_M` | `DATA: lv_text TYPE string` |
+| `DATA: lv_lang TYPE LANG` | `DATA: lv_lang TYPE sy-langu` |
+| `DATA: lv_name TYPE SEOCLSNAME` | `DATA: lv_name TYPE string` |
 
-Abap2xlsx provides a dedicated `src/not_cloud/` sub-package. Exclude it when deploying to a cloud tenant:
+The class `zcl_excel_obsolete_func_wrap` wraps function modules that are not available on
+cloud (`GUI_DOWNLOAD`, `GUI_UPLOAD`, `POPUP_TO_CONFIRM`, `SAPGUI_PROGRESS_INDICATOR`). The
+cloud-compatible replacements are `cl_gui_frontend_services` (on classic ABAP) or HTTP
+download (on BTP).
 
+## Cloud Installation
+
+### abapGit
+
+Install only the main `src/` package via abapGit. In the `.abapgit.xml`:
+
+```xml
+<asx:values>
+  <DATA>
+    <PACKAGE>ZABAP2XLSX</PACKAGE>
+    <!-- Do NOT add ZABAP2XLSX_NOT_CLOUD for cloud systems -->
+  </DATA>
+</asx:values>
 ```
-abap2xlsx/
-  src/
-    zcl_excel.clas.abap            <- cloud-safe
-    zcl_excel_common.clas.abap     <- cloud-safe
-    ...
-    not_cloud/                     <- EXCLUDE from cloud deployments
-      zcl_excel_*_alv*.clas.abap
-      ...
-```
 
-## Checking Your Custom Code
+Or when cloning via abapGit online, choose only the `ZABAP2XLSX` top-level package and
+**deselect** `ZABAP2XLSX_NOT_CLOUD` (or the equivalent sub-package name in your system).
+
+### SAPlink / Manual Transport
+
+Import only objects from `src/` — do not import anything under `src/not_cloud/`.
+
+## Runtime Checks
+
+A useful pattern before calling any `not_cloud` class is to check whether the class exists:
 
 ```abap
-" Not allowed in ABAP Cloud
-DESCRIBE TABLE lt_data LINES lv_count.    " use lines( lt_data )
-DATA lv_lang  TYPE LANG.                  " use string or CL_ABAP_CONTEXT_INFO
-DATA lv_name  TYPE SEOCLSNAME.            " use string
-DATA lv_text  TYPE SCRTEXT_S.             " use string
-DATA lv_http  TYPE IHTTPNVP.              " use string
-DATA lv_width TYPE TDCWIDTHS.             " use i
-
-" Cloud-compatible equivalents
-DATA(lv_count) = lines( lt_data ).
-DATA(lv_lang)  = cl_abap_context_info=>get_system_language( ).
-DATA lv_name   TYPE string.
-DATA lv_text   TYPE string.
-DATA lv_http   TYPE string.
-DATA lv_width  TYPE i.
+IF cl_abap_classdescr=>describe_by_name( 'ZCL_EXCEL_CONVERTER' ) IS INITIAL.
+  " Running on cloud — use bind_table instead
+  lo_worksheet->bind_table( ip_table = lt_data ).
+ELSE.
+  " Running on classic — use converter
+  DATA(lo_conv) = NEW zcl_excel_converter( ).
+  DATA(lo_result) = lo_conv->convert( it_data = lt_data  it_fcat = lt_fcat ).
+ENDIF.
 ```
 
-## abapGit Installation for Cloud
+## Feature Matrix
 
-1. Open abapGit in your cloud system.
-2. Clone `https://github.com/abap2xlsx/abap2xlsx.git`.
-3. Map the root package to a cloud-enabled package (e.g. `ZABAP2XLSX`).
-4. Map `src/not_cloud/` to a separate package marked as not-for-cloud, or skip activation of those objects.
-5. Activate all objects in the main package.
-6. Run the demo programs (excluding ALV demos) to verify.
+| Feature | Cloud-compatible | Requires `not_cloud` |
+|---|:---:|:---:|
+| `zcl_excel_writer_2007` | ✅ | |
+| `zcl_excel_writer_huge_file` | ✅ | |
+| `zcl_excel_writer_csv` | ✅ | |
+| `zcl_excel_writer_xlsm` | ✅ | |
+| `zcl_excel_reader_2007` | ✅ | |
+| `zcl_excel_reader_huge_file` | ✅ | |
+| `zcl_excel_reader_xlsm` | ✅ | |
+| `zcl_excel_fill_template` | ✅ | |
+| `zcl_excel_security` (AES-256) | ✅ | |
+| `zcl_excel_autofilter` | ✅ | |
+| `zcl_excel_table` | ✅ | |
+| `zcl_excel_style_changer` | ✅ | |
+| `zcl_excel_converter` (ALV) | | ✅ |
+| `zcl_excel_converter_alv` | | ✅ |
+| `zcl_excel_converter_salv_table` | | ✅ |
+| `zcl_excel_converter_result_wd` | | ✅ |
+| `zcl_excel_ole` | | ✅ |
 
-## Known Limitations in Cloud
+## Next Steps
 
-- **ALV integration** (`ZCL_EXCEL_ALV_*`) is in `not_cloud/` and unavailable in cloud deployments. Use `bind_table()` or cell-by-cell population instead.
-- **GUI-based file upload/download** helpers are not available. Use BTP services or ABAP Cloud file APIs.
-
-## Related Resources
-
-- [abap2xlsx `src/not_cloud/` on GitHub](https://github.com/abap2xlsx/abap2xlsx/tree/main/src/not_cloud)
-- [SAP Help - ABAP Cloud programming model restrictions](https://help.sap.com/docs/abap-cloud)
-- **[ALV Integration](/guide/alv-integration)** - On-premise only
-- **[Data Conversion](/guide/data-conversion)** - Cloud-safe patterns
-- **[Performance](/guide/performance)** - Applies to all targets
-- **[Changelog](/guide/changelog)** - Full history of cloud compatibility commits
+- **[ALV Converter and OLE](/guide/alv-converter)** — full documentation for `not_cloud` classes
+- **[Data Conversion](/guide/data-conversion)** — cloud-safe `bind_table` patterns
+- **[Huge-File Writer](/guide/huge-file-writer)** — streaming writer for large datasets
+- **[Workbook Security](/guide/workbook-security)** — AES-256 encryption
