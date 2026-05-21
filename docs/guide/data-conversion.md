@@ -1,139 +1,148 @@
 # Data Conversion
 
-This guide covers the different approaches for converting ABAP data structures into Excel format and back.
+Abap2xlsx maps ABAP data types to Excel cell types and applies conversion exits where necessary. This page documents how common ABAP types are handled, what conversion helpers are available, and how to control the conversion behaviour.
 
-## Overview of Conversion Methods
+## ABAP → Excel type mapping
 
-| Method | Best For | Cloud Safe |
-|---|---|---|
-| `bind_table()` | Simple, flat internal tables | Yes |
-| `zcl_excel_converter` | Flexible field-level mapping | Yes |
-| Cell-by-cell (`set_cell`) | Full control, custom layouts | Yes |
-| ALV integration | Reusing ALV field catalogs | No (on-premise only) |
+| ABAP type | ABAP type kind | Excel cell type | Notes |
+|---|---|---|---|
+| `I` Integer | `i` | Number | Stored as integer |
+| `F` Float | `f` | Number | IEEE 754 double |
+| `P` Packed | `p` | Number | Decimal separator locale-aware |
+| `DECFLOAT16` | `a` | Number | 16-digit decimal float |
+| `DECFLOAT34` | `e` | Number | 34-digit decimal float |
+| `D` Date | `d` | Number (date serial) | Days since 1900-01-00; worksheet date format applied |
+| `T` Time | `t` | Number (time fraction) | Fractional day (0.5 = 12:00:00) |
+| `UTCLONG` | `p` (internal) | Number (datetime serial) | **S/4HANA only** — see below |
+| `C` Character | `c` | String | Leading zeros preserved |
+| `N` Numeric text | `n` | String or Number | Treated as string to preserve leading zeros |
+| `STRING` | `g` | String | |
+| `X` / `XSTRING` | `x` / `y` | Not directly mapped | Encode as base64 string or embed as a drawing |
 
-## bind_table - Simple Table Export
+### UTCLONG support (S/4HANA)
 
-```abap
-DATA: lt_data TYPE TABLE OF sflight.
-SELECT * FROM sflight INTO TABLE @lt_data UP TO 100 ROWS.
+`UTCLONG` is the S/4HANA UTC timestamp type (16-byte packed, microsecond precision). When `set_cell` receives a value whose runtime type resolves to the internal typekind `'p'` and the data reference matches the `variable_utclong` pattern, the value is converted to an Excel datetime serial number (combined date + time fraction).
 
-lo_worksheet->bind_table(
-  ip_table       = lt_data
-  it_field_names = VALUE #(
-    ( columnname = 'CARRID' text = 'Carrier' )
-    ( columnname = 'CONNID' text = 'Connection' )
-    ( columnname = 'FLDATE' text = 'Flight Date' )
-    ( columnname = 'PRICE'  text = 'Price' )
-  )
-).
-```
-
-## zcl_excel_converter - Field-Level Mapping
-
-### Basic Usage
+This conversion is transparent — simply pass the `UTCLONG` field directly:
 
 ```abap
-DATA: lo_converter TYPE REF TO zcl_excel_converter,
-      lt_mapping   TYPE zcl_excel_converter=>tt_mapping.
-
-CREATE OBJECT lo_converter.
-
-lt_mapping = VALUE #(
-  ( fieldname = 'CARRID' column = 1 )
-  ( fieldname = 'CONNID' column = 2 )
-  ( fieldname = 'FLDATE' column = 3 )
-  ( fieldname = 'PRICE'  column = 4 )
-).
-
-lo_converter->convert(
-  EXPORTING it_data = lt_data  it_mapping = lt_mapping
-  CHANGING  co_worksheet = lo_worksheet
-).
-```
-
-### Performance Note - Pass-by-Reference (Feb 2025)
-
-> **Changed in Feb-Mar 2025 (PR [#1037](https://github.com/abap2xlsx/abap2xlsx/pull/1037), PR [#1039](https://github.com/abap2xlsx/abap2xlsx/pull/1039)):** Large structure and table parameters previously passed by value (`VALUE`) are now passed by reference (`REFERENCE`).
-
-This is a **transparent internal change** - your calling code does not need modification. It significantly reduces memory copying overhead for large datasets. If you have custom subclasses or method redefinitions of converter methods, review your signatures for compatibility.
-
-### Autofilter Fix (Sep 2024)
-
-> **Fixed in Sep 2024 (PR [#1239](https://github.com/abap2xlsx/abap2xlsx/pull/1239)):** Using `zcl_excel_converter` with an ALV field catalog that included autofilter could produce an incorrect or missing autofilter range in the output file.
-
-Updating to the latest abap2xlsx version resolves this. No code changes required.
-
-### LOOP_NORMAL Fix - Correct Dynamic ASSIGN Handling (Jun 2025)
-
-> **Bug fixed in Jun 2025 (PR [#1310](https://github.com/abap2xlsx/abap2xlsx/pull/1310)):** Two defects in the `LOOP_NORMAL` internal method:
->
-> 1. After a dynamic `ASSIGN`, the code tested `IF <fs> IS ASSIGNED` - which is always `TRUE` after any assignment but does **not** detect a failed one. Corrected to `IF sy-subrc = 0`.
-> 2. When two invalid column names were supplied simultaneously, only the first error was raised. Both are now caught.
-
-```abap
-TRY.
-    lo_converter->convert(
-      EXPORTING it_data = lt_data  it_mapping = lt_mapping_with_typo
-      CHANGING  co_worksheet = lo_worksheet
-    ).
-  CATCH zcx_excel INTO DATA(lx_excel).
-    " Now reliably raised for ALL invalid field names
-    MESSAGE |Converter error: { lx_excel->get_text( ) }| TYPE 'E'.
-ENDTRY.
-```
-
-## Cell-by-Cell Population
-
-```abap
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Carrier' ).
-lo_worksheet->set_cell( ip_column = 'B' ip_row = 1 ip_value = 'Connection' ).
-
-DATA(lv_row) = 2.
-LOOP AT lt_data INTO DATA(ls_flight).
-  lo_worksheet->set_cell( ip_column = 'A' ip_row = lv_row ip_value = ls_flight-carrid ).
-  lo_worksheet->set_cell( ip_column = 'B' ip_row = lv_row ip_value = ls_flight-connid ).
-  ADD 1 TO lv_row.
-ENDLOOP.
-```
-
-## Reading Data Back
-
-See **[Reading Excel](/guide/reading-excel)** for full coverage of `zcl_excel_reader_2007`, including `totalsRowFunction` round-trip (Feb 2026) and the SAP Note 2922674 XML namespace fix in the reader (Nov 2025).
-
-## ALV Integration (On-Premise Only)
-
-See **[ALV Integration](/guide/alv-integration)**.
-
-> **Cloud note:** ALV classes live in `src/not_cloud/` and are unavailable in S/4HANA Cloud / BTP. Use `bind_table()` or cell-by-cell population instead. See **[Cloud Compatibility](/guide/cloud-compatibility)**.
-
-## Data Type Handling
-
-### Dates
-
-Abap2xlsx automatically converts ABAP `d` typed fields to Excel date serial numbers in `bind_table` and `set_cell`. Use `zcl_excel_common=>excel_string_to_date()` for manual conversions when reading back.
-
-### Amounts and Quantities
-
-```abap
-DATA: lo_style     TYPE REF TO zcl_excel_style,
-      lo_num_format TYPE REF TO zcl_excel_style_number_format.
-
-lo_style      = lo_excel->add_new_style( ).
-lo_num_format = lo_style->number_format.
-lo_num_format->set_format_code( '#,##0.00' ).
+DATA: lv_ts TYPE utclong.
+GET TIME STAMP FIELD lv_ts.
 
 lo_worksheet->set_cell(
-  ip_column = 'D'  ip_row = lv_row
-  ip_value  = ls_flight-price  ip_style = lo_style
-).
+  ip_column = 3
+  ip_row    = 5
+  ip_value  = lv_ts ).
 ```
 
-## Next Steps
+Apply a combined date-time number format to the cell style so Excel renders it correctly:
 
-- **[Worksheets](/guide/worksheets)** - Multiple sheets and comment box positioning
-- **[Formatting](/guide/formatting)** - Apply styles to exported data
-- **[Reading Excel](/guide/reading-excel)** - Round-trip your data
-- **[CSV Export](/guide/csv-export)** - Export to CSV with skip-hidden-rows/columns
-- **[Cloud Compatibility](/guide/cloud-compatibility)** - Restrictions for BTP/S/4HANA Cloud
-- **[Performance](/guide/performance)** - Tips for large datasets
-- **[Changelog](/guide/changelog)** - Full history of recent changes
+```abap
+DATA(lv_style) = lo_worksheet->change_cell_style(
+  ip_column                     = 3
+  ip_row                        = 5
+  ip_number_format_format_code  = 'YYYY-MM-DD HH:MM:SS' ).
+```
+
+> `UTCLONG` is only available on systems running SAP_BASIS 7.55 or higher (S/4HANA 2020+). On ECC / older NetWeaver systems, use `TIMESTAMP` (`P` type, 15 digits) and format it as a date/time string before passing to `set_cell`.
+
+## `ip_abap_type` override
+
+When automatic type detection produces the wrong Excel type, pass `ip_abap_type` explicitly:
+
+```abap
+" Force a numeric string field to be treated as a number
+lo_worksheet->set_cell(
+  ip_column    = 2
+  ip_row       = 4
+  ip_value     = '000123'
+  ip_abap_type = cl_abap_typedescr=>typekind_int ).
+
+" Force a packed field to be treated as text (preserve formatting)
+lo_worksheet->set_cell(
+  ip_column    = 2
+  ip_row       = 5
+  ip_value     = lv_packed
+  ip_abap_type = cl_abap_typedescr=>typekind_char ).
+```
+
+The `ip_abap_type` parameter accepts constants from `cl_abap_typedescr` (`typekind_int`, `typekind_char`, `typekind_float`, etc.).
+
+## `ip_data_type` — explicit Excel type
+
+For direct control of the Excel cell type tag use `ip_data_type` (type `zexcel_cell_data_type`):
+
+| Constant | XML value | When to use |
+|---|---|---|
+| `zcl_excel_worksheet=>c_cell_type_string` | `s` | Force string shared table entry |
+| `zcl_excel_worksheet=>c_cell_type_formula` | `f` | Formula result type override |
+| `zcl_excel_worksheet=>c_cell_type_number` | `n` | Numeric (default for numbers) |
+| `zcl_excel_worksheet=>c_cell_type_boolean` | `b` | TRUE / FALSE |
+
+## Conversion exits
+
+### `ip_conv_exit_length`
+
+When `abap_true`, applies the `LENGTH` conversion exit to a field before writing. This pads the value to the field's declared length, which preserves leading spaces in fixed-length character fields:
+
+```abap
+lo_worksheet->set_cell(
+  ip_column           = 1
+  ip_row              = 5
+  ip_value            = lv_field
+  ip_conv_exit_length = abap_true ).
+```
+
+The same parameter is available on `bind_table` as `ip_conv_exit_length` (applies to all fields in the table).
+
+### `ip_conv_curr_amt_ext`
+
+When `abap_true` on `bind_table`, applies the external currency-amount conversion exit to all `CURR` fields. This formats the value according to the currency's decimal places definition in table `TCURX`:
+
+```abap
+lo_worksheet->bind_table(
+  ip_table             = lt_sales
+  it_field_catalog     = lt_catalog
+  ip_conv_curr_amt_ext = abap_true ).
+```
+
+## Currency fields in `bind_table`
+
+For proper currency formatting, populate the `currency` field in `zexcel_s_fieldcatalog` and the corresponding `ref_field` pointing to the currency code column:
+
+```abap
+ls_cat-fieldname = 'AMOUNT'.
+ls_cat-currency  = 'EUR'.
+ls_cat-ref_field = 'WAERS'.   " column holding the currency key
+APPEND ls_cat TO lt_catalog.
+```
+
+The writer then formats the number cell with the matching Excel currency number format.
+
+## `zcl_excel_common` helper methods
+
+| Method | Purpose |
+|---|---|
+| `convert_column2alpha` | Integer column number → alpha (`1` → `'A'`, `26` → `'Z'`, `27` → `'AA'`) |
+| `convert_column2int` | Alpha column → integer (`'AA'` → `27`) |
+| `convert_date2excel` | ABAP `D` date → Excel serial number |
+| `convert_time2excel` | ABAP `T` time → fractional day |
+| `convert_excel2date` | Excel serial → ABAP date |
+| `convert_columnrow2alpha` | Column int + row int → cell reference string (`2,3` → `'B3'`) |
+| `excel_string_to_date` | Parse a date string from a cell value |
+| `excel_string_to_time` | Parse a time string from a cell value |
+
+```abap
+" Column number to letter
+DATA(lv_alpha) = zcl_excel_common=>convert_column2alpha( 4 ).  " → 'D'
+
+" ABAP date to Excel serial
+DATA(lv_serial) = zcl_excel_common=>convert_date2excel( sy-datum ).
+```
+
+## See also
+
+- [Writing Cells](./worksheets.md) — `set_cell` signature and examples
+- [Reading Excel Files](./reading-excel.md) — reverse mapping (Excel → ABAP)
+- [Convert to Table](./convert-to-table.md) — `convert_to_table` for bulk sheet reads
+- [bind_table and Field Catalog](./excel-tables.md)

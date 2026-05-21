@@ -1,551 +1,383 @@
-# Working with Worksheets
+# Worksheets
 
-Comprehensive guide to managing multiple worksheets and worksheet-specific features in abap2xlsx.
+A worksheet (`zcl_excel_worksheet`) is the primary canvas for all cell data, styling, drawing, and sheet-level configuration in abap2xlsx. Every `zcl_excel` workbook holds one or more worksheets.
 
-## Understanding Worksheets
-
-### Worksheet Basics
-
-In Excel, a workbook contains one or more worksheets. Each worksheet is represented by the `zcl_excel_worksheet` class in abap2xlsx.
+## Creating and accessing worksheets
 
 ```abap
-" Basic worksheet operations
-DATA: lo_excel       TYPE REF TO zcl_excel,
-      lo_worksheet   TYPE REF TO zcl_excel_worksheet.
+DATA: lo_excel     TYPE REF TO zcl_excel,
+      lo_worksheet TYPE REF TO zcl_excel_worksheet.
 
 CREATE OBJECT lo_excel.
 
-" get_active_worksheet returns the first sheet, which zcl_excel creates automatically
+" First worksheet is created automatically
 lo_worksheet = lo_excel->get_active_worksheet( ).
-
-" Sheet title appears as the tab label in Excel
 lo_worksheet->set_title( 'Sales Data' ).
+
+" Add further worksheets
+lo_worksheet = lo_excel->add_new_worksheet( ).
+lo_worksheet->set_title( 'Summary' ).
 ```
 
-### Worksheet Properties
+## Writing cells
+
+`set_cell` is the primary method for writing a single cell. It accepts the address either as an alpha reference (`ip_columnrow`) or as separate column + row integers.
 
 ```abap
-" Configure worksheet properties
-lo_worksheet->set_title( 'Q1 Sales Report' ).
+" Alpha reference
+lo_worksheet->set_cell( ip_columnrow = 'B3' ip_value = 'Hello' ).
 
-" Control sheet visibility — very_hidden sheets cannot be shown via the Excel UI
-lo_worksheet->set_sheet_state( zcl_excel_worksheet=>c_sheet_state_visible ).
-" Other options: c_sheet_state_hidden, c_sheet_state_very_hidden
+" Column + row integers
+lo_worksheet->set_cell( ip_column = 2 ip_row = 3 ip_value = 'Hello' ).
 
-" Colour the sheet tab
-DATA(lo_tabcolor) = lo_worksheet->get_tabcolor( ).
-lo_tabcolor->set_rgb( 'FF0000' ).  " Red tab — use a 6-digit hex RGB string
-```
-
-## Creating Multiple Worksheets
-
-### Adding New Worksheets
-
-```abap
-" Create multiple worksheets for different data sections
-DATA: lo_summary_sheet TYPE REF TO zcl_excel_worksheet,
-      lo_details_sheet TYPE REF TO zcl_excel_worksheet,
-      lo_charts_sheet  TYPE REF TO zcl_excel_worksheet.
-
-" Each add_new_worksheet call appends a tab at the right of the tab bar
-lo_summary_sheet = lo_excel->add_new_worksheet( ).
-lo_summary_sheet->set_title( 'Summary' ).
-
-lo_details_sheet = lo_excel->add_new_worksheet( ).
-lo_details_sheet->set_title( 'Detailed Data' ).
-
-lo_charts_sheet = lo_excel->add_new_worksheet( ).
-lo_charts_sheet->set_title( 'Charts & Analysis' ).
-
-" Make the first tab active when the file opens (index is 1-based)
-lo_excel->set_active_sheet_index( 1 ).
-```
-
-### Worksheet Navigation
-
-```abap
-" Navigate between worksheets
-DATA: lo_worksheets  TYPE REF TO zcl_excel_worksheets,
-      lv_sheet_count TYPE i.
-
-" The worksheets collection mirrors the tab order
-lo_worksheets  = lo_excel->get_worksheets( ).
-lv_sheet_count = lo_worksheets->size( ).
-
-WRITE: / |Workbook contains { lv_sheet_count } worksheets|.
-
-" Three equivalent ways to retrieve a specific worksheet reference
-lo_worksheet = lo_excel->get_worksheet_by_index( 2 ).        " By tab position (1-based)
-lo_worksheet = lo_excel->get_worksheet_by_name( 'Summary' ). " By exact tab label
-lo_worksheet = lo_excel->get_active_worksheet( ).            " Currently active tab
-
-" Use an iterator to process every sheet in order
-DATA: lo_iterator TYPE REF TO zcl_excel_worksheets_iterator.
-lo_iterator = lo_worksheets->get_iterator( ).
-
-WHILE lo_iterator->has_next( ) = abap_true.
-  lo_worksheet = lo_iterator->get_next( ).
-  WRITE: / 'Processing worksheet:', lo_worksheet->get_title( ).
-  " Your worksheet-specific logic here
-ENDWHILE.
-```
-
-## Worksheet Layout and Structure
-
-### Page Setup and Print Settings
-
-```abap
-" Configure page setup for printing
-DATA: lo_page_setup TYPE REF TO zcl_excel_sheet_setup.
-
-lo_page_setup = lo_worksheet->get_sheet_setup( ).
-
-" Orientation: portrait (default) or landscape
-lo_page_setup->set_orientation( zcl_excel_sheet_setup=>c_orientation_landscape ).
-
-" Paper size constant maps to the OOXML paperSize numeric attribute
-lo_page_setup->set_paper_size( zcl_excel_sheet_setup=>c_papersize_a4 ).
-
-" Margins are specified in inches (decimal string)
-lo_page_setup->set_margin_left( '0.75' ).
-lo_page_setup->set_margin_right( '0.75' ).
-lo_page_setup->set_margin_top( '1.0' ).
-lo_page_setup->set_margin_bottom( '1.0' ).
-lo_page_setup->set_margin_header( '0.5' ).
-lo_page_setup->set_margin_footer( '0.5' ).
-
-" Restrict printing to a named range of cells
-lo_worksheet->set_print_area( 'A1:H50' ).
-
-" Repeat title rows and columns on every printed page
-lo_worksheet->set_print_title_rows( '1:2' ).    " Repeat first 2 rows on each page
-lo_worksheet->set_print_title_columns( 'A:B' ). " Repeat columns A and B on each page
-```
-
-### Page Breaks
-
-Page breaks let you control exactly where Excel splits a worksheet for printing. The
-`zcl_excel_worksheet_pagebreaks` class (accessible via `lo_worksheet->page_breaks`)
-provides two methods:
-
-#### Adding a Page Break
-
-```abap
-" Insert a horizontal page break before row 30
-" (rows 1-29 print on page 1, rows 30+ continue on page 2)
-lo_worksheet->page_breaks->add_pagebreak(
-  ip_column = 'A'   " column position (for a row break, use any column; 'A' is conventional)
-  ip_row    = 30    " break occurs BEFORE this row
-).
-
-" Insert a vertical page break before column E
-lo_worksheet->page_breaks->add_pagebreak(
-  ip_column = 'E'   " break occurs BEFORE this column
-  ip_row    = 1     " row position (for a column break, use 1 or the header row)
-).
-```
-
-> **Row vs column breaks:** Excel distinguishes row breaks (horizontal) and column breaks
-> (vertical) by the combination of `ip_column` and `ip_row` values passed to the writer.
-> A break at (`ip_column = 'A'`, `ip_row = N`) is serialised as a row page break.
-> A break at (`ip_column = 'X'`, `ip_row = 1`) is serialised as a column page break.
-
-#### Reading All Breaks (Diagnostic / Test Use)
-
-```abap
-" Retrieve all registered breaks as a hashed table
-DATA(lt_breaks) = lo_worksheet->page_breaks->get_all_pagebreaks( ).
-
-" Structure of each row: cell_row (zexcel_cell_row), cell_column (zexcel_cell_column)
-LOOP AT lt_breaks INTO DATA(ls_break).
-  WRITE: / 'Break at row:', ls_break-cell_row,
-             'column:', ls_break-cell_column.
-ENDLOOP.
-```
-
-#### Combining Page Breaks with Print Area
-
-```abap
-" Typical pattern: restrict print area, add section breaks
-lo_page_setup->set_paper_size( zcl_excel_sheet_setup=>c_papersize_a4 ).
-lo_page_setup->set_orientation( zcl_excel_sheet_setup=>c_orientation_portrait ).
-lo_worksheet->set_print_area( 'A1:H100' ).
-
-" Add breaks every 30 data rows
-DATA(lv_break_row) = 31.  " Row 1 = header; rows 2-30 = first page
-WHILE lv_break_row <= 100.
-  lo_worksheet->page_breaks->add_pagebreak( ip_column = 'A'  ip_row = lv_break_row ).
-  ADD 30 TO lv_break_row.
-ENDWHILE.
-```
-
-### Freeze Panes
-
-```abap
-" Freeze panes lock rows/columns so they stay visible while scrolling
-
-" Freeze first row (header) and first column (row labels)
-lo_worksheet->freeze_panes( ip_num_rows = 1 ip_num_columns = 1 ).
-
-" Freeze a larger area — e.g. 3 header rows and 2 label columns
-lo_worksheet->freeze_panes( ip_num_rows = 3 ip_num_columns = 2 ).
-
-" Split panes divide the view into independently-scrollable quadrants
-lo_worksheet->set_split_panes(
-  ip_x_split = 2000  " Horizontal split position in 1/20th of a point
-  ip_y_split = 1000  " Vertical split position in 1/20th of a point
-).
-```
-
-## Column and Row Management
-
-### Column Operations
-
-```abap
-" Set column widths
-DATA: lo_column TYPE REF TO zcl_excel_column.
-
-" Width is specified in Excel's 'character units' (roughly, characters of the default font)
-lo_column = lo_worksheet->get_column( 'A' ).
-lo_column->set_width( 15 ).
-
-lo_column = lo_worksheet->get_column( 'B' ).
-lo_column->set_width( 25 ).
-
-" Auto-size asks Excel to fit the column to its widest cell on next open
-lo_column->set_auto_size( abap_true ).
-
-" Hidden columns are excluded from the view but remain in the data
-lo_column->set_visible( abap_false ).
-
-" Outline level >= 1 makes the column part of a collapsible group
-lo_column->set_outline_level( 1 ).
-```
-
-### Row Operations
-
-```abap
-" Set row heights and properties
-DATA: lo_row TYPE REF TO zcl_excel_row.
-
-" Row height in points (same unit as Excel's row height dialog)
-lo_row = lo_worksheet->get_row( 1 ).
-lo_row->set_row_height( 25 ).
-
-" Hidden rows are excluded from the view but remain in the data
-lo_row->set_visible( abap_false ).
-
-" Outline level >= 1 makes the row part of a collapsible group
-lo_row->set_outline_level( 1 ).
-```
-
-### Row and Column Grouping
-
-```abap
-" Create collapsible groups by setting outline levels
-
-" Group rows 5-10 at level 1 (one '+' button in the margin)
-DATA: lv_row TYPE i.
-DO 6 TIMES.
-  lv_row = 4 + sy-index.  " sy-index runs 1..6 -> rows 5..10
-  lo_row = lo_worksheet->get_row( lv_row ).
-  lo_row->set_outline_level( 1 ).
-ENDDO.
-
-" Group columns C-F at level 1
-DATA: lv_col_alpha TYPE string.
-DATA: lv_columns   TYPE TABLE OF string.
-APPEND 'C' TO lv_columns.
-APPEND 'D' TO lv_columns.
-APPEND 'E' TO lv_columns.
-APPEND 'F' TO lv_columns.
-
-LOOP AT lv_columns INTO lv_col_alpha.
-  lo_column = lo_worksheet->get_column( lv_col_alpha ).
-  lo_column->set_outline_level( 1 ).
-ENDLOOP.
-```
-
-## Cell Comments
-
-### Adding Comments to Cells
-
-```abap
-" Add a comment to a cell
-DATA: lo_comment TYPE REF TO zcl_excel_comment.
-
-" add_new_comment creates and registers the comment on the worksheet
-lo_comment = lo_worksheet->add_new_comment( ).
-lo_comment->set_text( ip_value = 'This is an important note.' ).
-lo_comment->set_author( 'Karthikeyan' ).             " Displayed as the comment author in Excel
-lo_comment->set_ref( ip_column = 'B' ip_row = 3 ).  " Cell the comment is anchored to
-```
-
-### Comment Box Positioning — Updated API (2025-06)
-
-> **Breaking change in Jun 2025 (PR [#1316](https://github.com/abap2xlsx/abap2xlsx/pull/1316)):** The eight individual comment box geometry attributes have been consolidated into a **single structure** `ms_box` of type `zcl_excel_comment=>ty_box`. If you were setting these attributes individually before June 2025, update your code as shown below.
-
-**Before (pre-Jun 2025):**
-```abap
-" Old API — individual attributes, no longer exists
-lo_comment->bottom_offset = 1.
-lo_comment->bottom_row    = 7.
-lo_comment->left_column   = 2.
-lo_comment->left_offset   = 15.
-lo_comment->right_column  = 4.
-lo_comment->right_offset  = 10.
-lo_comment->top_offset    = 2.
-lo_comment->top_row       = 2.
-```
-
-**After (Jun 2025+):**
-```abap
-" New API — all eight geometry fields are grouped in one structure
-DATA: ls_box TYPE zcl_excel_comment=>ty_box.
-
-" Start from the built-in default so you only override the fields that differ
-ls_box = zcl_excel_comment=>mc_box_default.
-
-" Override only the values you need to change from the standard position
-ls_box-bottom_row   = 7.
-ls_box-right_column = 4.
-ls_box-top_row      = 2.
-ls_box-left_column  = 2.
-
-lo_comment->ms_box = ls_box.  " Assign the completed structure back to the comment
-```
-
-The `mc_box_default` constant provides sensible defaults for all eight fields so you only need to override the values that differ from the standard position.
-
-### Reading Comments — Copy Semantics
-
-> **Updated in Jun 2025 (PR [#1317](https://github.com/abap2xlsx/abap2xlsx/pull/1317)):** `get_comments()` now returns a **copy** of the internal comments collection. Modifications to the returned object do not affect the worksheet's live state.
-
-```abap
-" Read comments — get_comments() returns a snapshot copy, not a live reference
-DATA: lo_comments TYPE REF TO zcl_excel_comments,
-      lo_comment  TYPE REF TO zcl_excel_comment.
-
-lo_comments = lo_worksheet->get_comments( ).
-
-lo_comment = lo_comments->get_comment( ip_column = 'B' ip_row = 3 ).
-IF lo_comment IS BOUND.
-  WRITE: / 'Comment text:', lo_comment->get_text( ).
-ENDIF.
-```
-
-The copy constructor for `zcl_excel_worksheet` also now correctly carries the comments collection when a worksheet is duplicated.
-
-## Worksheet Protection
-
-### Protecting Worksheets
-
-```abap
-" Protect worksheet with password
-lo_worksheet->set_protection(
-  ip_password  = 'mypassword'
-  ip_sheet     = abap_true     " Activate sheet protection
-  ip_objects   = abap_true     " Protect embedded objects
-  ip_scenarios = abap_true     " Protect named scenarios
-).
-
-" Fine-grained protection — allow specific operations even on a protected sheet
-DATA: lo_protection TYPE REF TO zcl_excel_protection.
-lo_protection = lo_worksheet->get_protection( ).
-
-lo_protection->set_password( 'mypassword' ).
-lo_protection->set_sheet( abap_true ).
-lo_protection->set_format_cells( abap_false ).    " Users may still format cells
-lo_protection->set_format_columns( abap_false ).  " Users may still resize columns
-lo_protection->set_format_rows( abap_false ).     " Users may still resize rows
-lo_protection->set_insert_columns( abap_false ).  " Users may still insert columns
-lo_protection->set_insert_rows( abap_false ).     " Users may still insert rows
-```
-
-### Cell-Level Protection
-
-```abap
-" In a protected sheet every cell is locked by default.
-" Create an 'unlocked' style and apply it to the cells that must remain editable.
-DATA: lo_style TYPE REF TO zcl_excel_style.
-
-" Add a new style to the workbook's style registry
-lo_style = lo_excel->add_new_style( ).
-lo_style->protection->locked = abap_false.  " This is the key flag
-
-" Apply the unlocked style to the input cells
+" With a style GUID
 lo_worksheet->set_cell(
-  ip_column = 'B'
-  ip_row    = 5
-  ip_value  = 'Editable Cell'
-  ip_style  = lo_style
-).
+  ip_column   = 2
+  ip_row      = 3
+  ip_value    = lv_amount
+  ip_style    = lv_style_guid ).
+
+" With a formula
+lo_worksheet->set_cell(
+  ip_column  = 5
+  ip_row     = 10
+  ip_formula = 'SUM(E2:E9)' ).
 ```
 
-## Advanced Worksheet Features
+### ABAP type mapping
 
-### Headers and Footers
+`set_cell` inspects the runtime type of `ip_value` and maps it to the correct Excel data type automatically.
+
+| ABAP type | Excel type written | Notes |
+|---|---|---|
+| `I`, `F`, `P`, `DECFLOAT16/34` | Number | Decimal separator adjusted |
+| `D` (date) | Number (date serial) | Uses worksheet date format |
+| `T` (time) | Number (time fraction) | Stored as fractional day |
+| `UTCLONG` | Number (datetime serial) | S/4HANA only — see [Data Conversion](./data-conversion.md) |
+| `C`, `N`, `STRING` | String or Number | Leading-zero strings stay as text |
+| `X` (XSTRING) | Not directly supported | Convert to base64 or use a drawing |
+
+## Reading cells
 
 ```abap
-" Set header and footer
-DATA: lo_header_footer TYPE REF TO zcl_excel_header_footer.
+DATA: lv_value   TYPE zexcel_cell_value,
+      lv_formula TYPE zexcel_cell_formula,
+      lv_rc      TYPE sysubrc.
 
-lo_header_footer = lo_worksheet->get_header_footer( ).
-
-" Header/footer code reference:
-" &L = Left section    &C = Centre section    &R = Right section
-" &D = Current date   &T = Current time      &P = Page number   &N = Total pages
-" &"FontName,Style"   sets font name and style for the following text
-lo_header_footer->set_odd_header(
-  '&L&"Arial,Bold"Company Name&C&"Arial"Sales Report&R&D'
-).
-
-lo_header_footer->set_odd_footer(
-  '&LConfidential&C&P of &N&R&T'
-).
+lo_worksheet->get_cell(
+  ip_column  = 3
+  ip_row     = 5
+  IMPORTING
+    ep_value   = lv_value
+    ep_formula = lv_formula
+    ep_rc      = lv_rc ).  " sy-subrc: 0 = found, 4 = empty
 ```
 
-### Background Images
+## Cell ranges and bulk operations
+
+`set_area` writes the same value, formula, style, or hyperlink to every cell in a rectangular range.
 
 ```abap
-" Set worksheet background image (tiled fill behind the cells)
-DATA: lv_image_data TYPE xstring.
+" Fill a range by alpha reference
+lo_worksheet->set_area(
+  ip_range   = 'A1:D1'
+  ip_style   = lv_header_style ).
 
-" Load image data as binary XSTRING from BDS, MIME repository, or file upload
-" lv_image_data = load_background_image( ).
-
-lo_worksheet->set_background_image( lv_image_data ).
+" Fill a range by column/row bounds
+lo_worksheet->set_area(
+  ip_column_start = 1
+  ip_column_end   = 4
+  ip_row          = 1
+  ip_row_to       = 1
+  ip_value        = 'Header'
+  ip_style        = lv_style ).
 ```
 
-### Worksheet Views
+Related range methods:
+
+| Method | Purpose |
+|---|---|
+| `set_area_style` | Apply a style to all cells in a range |
+| `set_area_formula` | Write one formula to all cells in a range |
+| `set_area_hyperlink` | Attach a hyperlink to all cells in a range |
+| `change_area_style` | Modify part of the style on an existing range via `zif_excel_style_changer` |
+| `set_merge` | Merge a range of cells (optionally with a value and formula) |
+| `set_merge_style` | Apply a style to a merged range |
+| `delete_merge` | Remove a cell merge |
+| `get_merge` | Return a string table of all current merge ranges |
+| `is_cell_merged` | Check if a specific cell is part of a merge |
+
+## Column and row sizing
 
 ```abap
-" Configure worksheet view settings
-DATA: lo_sheet_view TYPE REF TO zcl_excel_sheet_view.
+" Fixed pixel width
+lo_worksheet->set_column_width(
+  ip_column    = 3
+  ip_width_fix = 20 ).
 
-lo_sheet_view = lo_worksheet->get_sheet_view( ).
+" Auto-size (measure cell content)
+lo_worksheet->set_column_width(
+  ip_column         = 3
+  ip_width_autosize = abap_true ).
 
-" Zoom percentage — valid range is roughly 10-400
-lo_sheet_view->set_zoom_scale( 125 ).  " 125% zoom
+" Recalculate all column widths based on content
+lo_worksheet->calculate_column_widths( ).
 
-" View type controls the ruler/page-break overlay shown in Excel
-lo_sheet_view->set_view( zcl_excel_sheet_view=>c_view_normal ).
-" Other options: c_view_page_break_preview, c_view_page_layout
-
-" Toggle display elements
-lo_sheet_view->set_show_gridlines( abap_false ).        " Hide the cell grid
-lo_sheet_view->set_show_row_col_headers( abap_false ).  " Hide row numbers / column letters
-lo_sheet_view->set_show_zeros( abap_false ).            " Display zero values as blank
+" Fixed row height
+lo_worksheet->set_row_height(
+  ip_row        = 1
+  ip_height_fix = 25 ).
 ```
 
-## Worksheet Data Organisation
+## Freeze panes
 
-### Named Ranges
+`freeze_panes` locks the specified number of columns and/or rows so they remain visible while scrolling.
 
 ```abap
-" Create named ranges for easier formula reference
+" Freeze top row
+lo_worksheet->freeze_panes( ip_num_rows = 1 ).
+
+" Freeze first two columns
+lo_worksheet->freeze_panes( ip_num_columns = 2 ).
+
+" Freeze both rows and columns
+lo_worksheet->freeze_panes( ip_num_columns = 1 ip_num_rows = 3 ).
+```
+
+### Pane scroll position
+
+After freezing panes, you can control which cell appears in the top-left corner of the scrollable area, and which cell is the initial scroll position of the full sheet view.
+
+```abap
+" After freeze_panes( ip_num_rows = 3 ), show column D row 4 in the scrollable pane
+lo_worksheet->set_pane_top_left_cell( iv_columnrow = 'D4' ).
+
+" Set the initial top-left visible cell when the sheet is opened (no freeze required)
+lo_worksheet->set_sheetview_top_left_cell( iv_columnrow = 'F10' ).
+```
+
+- `set_pane_top_left_cell` — controls the top-left cell of the **frozen pane's scrollable region**. Useful when you want the sheet to open pre-scrolled past a large header block.
+- `set_sheetview_top_left_cell` — sets the top-left cell of the **entire sheet view** when first opened. Does not require a freeze pane to be active.
+
+Both methods accept any valid alpha cell reference (`'A1'`, `'D4'`, `'Z100'`, etc.).
+
+## Tab colour
+
+```abap
+DATA: ls_color TYPE zexcel_s_tabcolor.
+ls_color-rgb = 'FF4A90E2'.  " ARGB: opaque blue
+lo_worksheet->set_tabcolor( ls_color ).
+```
+
+## Grid and header visibility
+
+```abap
+lo_worksheet->set_show_gridlines( abap_false ).  " Hide gridlines
+lo_worksheet->set_show_rowcolheaders( abap_false ).  " Hide row/column headers
+lo_worksheet->set_print_gridlines( abap_true ).  " Print gridlines
+```
+
+## Dimension range
+
+`get_dimension_range` returns the used cell range of the worksheet as an Excel reference string (e.g. `'A1:G42'`):
+
+```abap
+DATA(lv_range) = lo_worksheet->get_dimension_range( ).
+```
+
+This is recalculated automatically as cells are written.
+
+## Highest used row / column
+
+```abap
+DATA(lv_max_row)    = lo_worksheet->get_highest_row( ).
+DATA(lv_max_column) = lo_worksheet->get_highest_column( ).
+```
+
+## Named ranges
+
+```abap
 DATA: lo_range TYPE REF TO zcl_excel_range.
-
-" Named ranges are registered at the workbook level, not the worksheet level
-lo_range = lo_excel->add_new_range( ).
-lo_range->set_name( 'SalesData' ).
-lo_range->set_value( 'Summary!$A$1:$E$100' ).  " Use fully-qualified sheet reference
-
-" Reference the named range by name in any formula
-lo_worksheet->set_cell_formula(
-  ip_column  = 'F'
-  ip_row     = 1
-  ip_formula = 'SUM(SalesData)'
-).
+lo_range = lo_worksheet->add_new_range( ).
+lo_range->set_name( 'MyRange' ).
+lo_range->set_value( 'Sheet1!$A$1:$D$10' ).
 ```
 
-### Data Validation
+See [Named Ranges](./named-ranges.md) for the full guide.
+
+## Row grouping and outlines
+
+Row grouping (also called outlining) adds the Excel expand/collapse controls to the left of a sheet. This is implemented via `set_row_outline`, `delete_row_outline`, and `get_row_outlines` on the worksheet.
 
 ```abap
-" Add a drop-down list validation to a column
-DATA: lo_data_validation TYPE REF TO zcl_excel_data_validation.
+" Group rows 5 through 12, initially collapsed
+lo_worksheet->set_row_outline(
+  iv_row_from  = 5
+  iv_row_to    = 12
+  iv_collapsed = abap_true ).
 
-lo_data_validation = lo_worksheet->add_new_data_validation( ).
-lo_data_validation->set_range( 'B2:B100' ).                             " Apply to the whole column
-lo_data_validation->set_type( zcl_excel_data_validation=>c_type_list ). " Drop-down list
-lo_data_validation->set_formula1( 'North,South,East,West' ).            " Comma-separated options
-lo_data_validation->set_allow_blank( abap_false ).                      " Mandatory field
-lo_data_validation->set_show_dropdown( abap_true ).                     " Show the arrow button
+" Group rows 5 through 12, expanded
+lo_worksheet->set_row_outline(
+  iv_row_from  = 5
+  iv_row_to    = 12
+  iv_collapsed = abap_false ).
 
-" Validation error message shown when the user enters an invalid value
-lo_data_validation->set_error_title( 'Invalid Region' ).
-lo_data_validation->set_error( 'Please select a valid region from the dropdown.' ).
+" Remove a row outline group
+lo_worksheet->delete_row_outline(
+  iv_row_from = 5
+  iv_row_to   = 12 ).
+
+" Read all current outline groups
+DATA(lt_outlines) = lo_worksheet->get_row_outlines( ).
 ```
 
-## Performance Considerations
+The internal table returned by `get_row_outlines` uses type `mty_ts_outlines_row`, a sorted table with unique key on `row_from`/`row_to`. Each entry has:
 
-### Efficient Worksheet Operations
+| Field | Type | Meaning |
+|---|---|---|
+| `row_from` | `i` | First row in the group |
+| `row_to` | `i` | Last row in the group |
+| `collapsed` | `abap_bool` | `abap_true` = group is collapsed on open |
+
+### Nested outline groups
+
+Excel supports up to 8 levels of nesting. Create nested groups by adding multiple overlapping or contained ranges:
 
 ```abap
-" Batch operations for better performance
-METHOD populate_worksheet_efficiently.
-  " Rule 1: Minimise worksheet switches — complete all work on one sheet
-  "         before moving to the next.
-
-  " Rule 2: Use bind_table for large datasets instead of cell-by-cell loops
-  lo_worksheet->bind_table( ip_table = lt_large_data ).
-
-  " Rule 3: Create a style once and reuse it — do not call add_new_style inside a loop
-  DATA(lo_header_style) = lo_excel->add_new_style( ).
-  " ... configure the style here ...
-
-  " Apply the pre-created style reference to every header cell
-  LOOP AT lt_headers INTO DATA(ls_header).
-    lo_worksheet->set_cell(
-      ip_column = ls_header-column
-      ip_row    = 1
-      ip_value  = ls_header-text
-      ip_style  = lo_header_style  " Reuse — no new style object per cell
-    ).
-  ENDLOOP.
-
-  " Rule 4: Release references when done to free memory
-  CLEAR: lo_worksheet, lo_header_style.
-ENDMETHOD.
+" Outer group: rows 2–20
+lo_worksheet->set_row_outline( iv_row_from = 2  iv_row_to = 20 iv_collapsed = abap_false ).
+" Inner group: rows 5–10
+lo_worksheet->set_row_outline( iv_row_from = 5  iv_row_to = 10 iv_collapsed = abap_true ).
+" Another inner group: rows 14–18
+lo_worksheet->set_row_outline( iv_row_from = 14 iv_row_to = 18 iv_collapsed = abap_true ).
 ```
 
-## Next Steps
+> **Column outlines** are not yet supported by the writer. Use the `bind_alv` path with an ALV layout that has column grouping if you need column-level outlining.
 
-After mastering worksheet management:
-
-- **[Cell Formatting](/guide/formatting)** - Style individual cells and ranges
-- **[Excel Formulas](/guide/formulas)** - Add calculations across worksheets
-- **[Charts and Graphs](/guide/charts)** - Create visual representations
-- **[Data Conversion](/guide/data-conversion)** - Efficiently populate worksheets with ABAP data
-- **[Reading Excel](/guide/reading-excel)** - Read back and process existing workbooks
-- **[AutoFilter](/guide/autofilter)** - Add drop-down column filters
-- **[Template Filling](/guide/template-filling)** - Fill pre-designed Excel templates
-- **[Changelog](/guide/changelog)** - Full history of recent changes
-
-## Common Worksheet Patterns
-
-### Multi-Sheet Report Structure
+## Page breaks
 
 ```abap
-" Standard pattern for a multi-sheet report with clear separation of concerns
-METHOD create_multi_sheet_report.
-  " Sheet 1: high-level KPIs and charts for management
-  DATA(lo_summary) = lo_excel->add_new_worksheet( ).
-  lo_summary->set_title( 'Executive Summary' ).
+DATA(lo_pb) = lo_worksheet->get_pagebreaks( ).
 
-  " Sheet 2: full row-level data for analysts
-  DATA(lo_details) = lo_excel->add_new_worksheet( ).
-  lo_details->set_title( 'Detailed Data' ).
+" Insert a row page break after row 40
+lo_pb->add_pagebreak( ip_row = 40 ).
 
-  " Sheet 3: visualisations derived from the detail data
-  DATA(lo_charts) = lo_excel->add_new_worksheet( ).
-  lo_charts->set_title( 'Analysis' ).
+" Insert a column page break after column 8 (column H)
+lo_pb->add_pagebreak( ip_column = 8 ).
 
-  " Populate each sheet via dedicated helper methods to keep the main method clean
-  setup_summary_sheet( lo_summary ).
-  setup_details_sheet( lo_details ).
-  setup_charts_sheet( lo_charts ).
-ENDMETHOD.
+" Programmatic page break every 50 rows
+DO.
+  DATA(lv_break_row) = sy-index * 50.
+  IF lv_break_row > lv_last_data_row. EXIT. ENDIF.
+  lo_pb->add_pagebreak( ip_row = lv_break_row ).
+ENDDO.
 ```
 
-This guide covers the essential techniques for managing worksheets in abap2xlsx. Proper worksheet organisation is key to creating professional, navigable Excel reports.
+See [zcl_excel_worksheet_pagebreaks](./worksheets.md) constants:
+- `zcl_excel_worksheet=>c_break_row` (`1`) — row break
+- `zcl_excel_worksheet=>c_break_column` (`2`) — column break
+- `zcl_excel_worksheet=>c_break_none` (`0`) — no break
+
+## Suppressing cell validation warnings
+
+Use `set_ignored_errors` to suppress Excel's green-triangle warnings (numbers as text, formula deviations, etc.) on specific cell ranges. See the dedicated [Ignored Errors](./ignored-errors.md) guide for all ten available flags.
+
+```abap
+DATA: lt_ie TYPE zcl_excel_worksheet=>mty_th_ignored_errors,
+      ls_ie TYPE zcl_excel_worksheet=>mty_s_ignored_errors.
+
+ls_ie-cell_coords          = 'A2:A500'.
+ls_ie-number_stored_as_text = abap_true.
+INSERT ls_ie INTO TABLE lt_ie.
+lo_worksheet->set_ignored_errors( lt_ie ).
+```
+
+## Active cell
+
+```abap
+DATA(lv_active) = lo_worksheet->get_active_cell( ).
+```
+
+Returns the currently selected cell reference (e.g. `'B3'`).
+
+## Print settings
+
+Print configuration is handled through the `zif_excel_sheet_printsettings` interface, which `zcl_excel_worksheet` implements:
+
+```abap
+lo_worksheet->zif_excel_sheet_printsettings~set_paper_size(
+  zcl_excel_sheet_setup=>c_paper_a4 ).
+lo_worksheet->zif_excel_sheet_printsettings~set_orientation(
+  zcl_excel_sheet_setup=>c_orientation_landscape ).
+lo_worksheet->zif_excel_sheet_printsettings~set_scale( 85 ).  " 85%
+lo_worksheet->zif_excel_sheet_printsettings~set_fittopage( abap_true ).
+```
+
+## Sheet properties
+
+Available through the `zif_excel_sheet_properties` interface:
+
+```abap
+" Set right-to-left display for Arabic / Hebrew sheets
+" (no public setter on zcl_excel_worksheet — configure via sheet_setup)
+lo_worksheet->sheet_setup->set_tab_color(
+  ip_color_rgb = 'FF00AA00' ).
+```
+
+## Sheet protection
+
+See [Workbook Security](./workbook-security.md).
+
+## Converting worksheet data back to ABAP
+
+To read cell data from an already-loaded worksheet back into an ABAP internal table, use `convert_to_table`. See [Reading Worksheet Data](./convert-to-table.md) for the full guide, including the difference between typed (`et_data`) and lossless string (`er_data`) output.
+
+```abap
+lo_worksheet->convert_to_table(
+  EXPORTING
+    it_field_catalog = lt_catalog
+    iv_begin_row     = 2
+  IMPORTING
+    et_data          = lt_result ).
+```
+
+## Iterators
+
+All sub-collections on a worksheet are accessible through iterator objects:
+
+| Method | Returns |
+|---|---|
+| `get_columns_iterator` | Iterator over `zcl_excel_column` objects |
+| `get_rows_iterator` | Iterator over `zcl_excel_row` objects |
+| `get_comments_iterator` | Iterator over `zcl_excel_comment` objects |
+| `get_drawings_iterator(ip_type)` | Iterator over charts or images |
+| `get_hyperlinks_iterator` | Iterator over `zcl_excel_hyperlink` objects |
+| `get_ranges_iterator` | Iterator over `zcl_excel_range` objects |
+| `get_tables_iterator` | Iterator over `zcl_excel_table` objects |
+| `get_style_cond_iterator` | Iterator over conditional style objects |
+| `get_data_validations_iterator` | Iterator over data validation objects |
+
+All iterators follow the same pattern:
+
+```abap
+DATA: lo_iter TYPE REF TO zcl_excel_collection_iterator,
+      lo_obj  TYPE REF TO object.
+
+lo_iter = lo_worksheet->get_comments_iterator( ).
+WHILE lo_iter->has_next( ) = abap_true.
+  lo_obj = lo_iter->get_next( ).
+  " Cast and use lo_obj
+ENDWHILE.
+```
+
+## See also
+
+- [Formatting](./formatting.md) — styles, fonts, fills, borders
+- [Cell Comments](./cell-comments.md) — adding comments to cells
+- [Ignored Errors](./ignored-errors.md) — suppressing green-triangle warnings
+- [Convert to Table](./convert-to-table.md) — reading worksheet data back into ABAP
+- [Row/Column Grouping](./row-column-grouping.md) — column outlines and grouping
+- [Autofilter](./autofilter.md) — dropdown column filters
+- [Named Ranges](./named-ranges.md) — workbook-level named ranges
+- [Data Validation](./data-validation.md) — constraining cell input
+- [Template Filling](./template-filling.md) — named-range token substitution
