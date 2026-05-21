@@ -122,6 +122,63 @@ lo_worksheet->set_print_title_rows( '1:2' ).    " Repeat first 2 rows on each pa
 lo_worksheet->set_print_title_columns( 'A:B' ). " Repeat columns A and B on each page
 ```
 
+### Page Breaks
+
+Page breaks let you control exactly where Excel splits a worksheet for printing. The
+`zcl_excel_worksheet_pagebreaks` class (accessible via `lo_worksheet->page_breaks`)
+provides two methods:
+
+#### Adding a Page Break
+
+```abap
+" Insert a horizontal page break before row 30
+" (rows 1-29 print on page 1, rows 30+ continue on page 2)
+lo_worksheet->page_breaks->add_pagebreak(
+  ip_column = 'A'   " column position (for a row break, use any column; 'A' is conventional)
+  ip_row    = 30    " break occurs BEFORE this row
+).
+
+" Insert a vertical page break before column E
+lo_worksheet->page_breaks->add_pagebreak(
+  ip_column = 'E'   " break occurs BEFORE this column
+  ip_row    = 1     " row position (for a column break, use 1 or the header row)
+).
+```
+
+> **Row vs column breaks:** Excel distinguishes row breaks (horizontal) and column breaks
+> (vertical) by the combination of `ip_column` and `ip_row` values passed to the writer.
+> A break at (`ip_column = 'A'`, `ip_row = N`) is serialised as a row page break.
+> A break at (`ip_column = 'X'`, `ip_row = 1`) is serialised as a column page break.
+
+#### Reading All Breaks (Diagnostic / Test Use)
+
+```abap
+" Retrieve all registered breaks as a hashed table
+DATA(lt_breaks) = lo_worksheet->page_breaks->get_all_pagebreaks( ).
+
+" Structure of each row: cell_row (zexcel_cell_row), cell_column (zexcel_cell_column)
+LOOP AT lt_breaks INTO DATA(ls_break).
+  WRITE: / 'Break at row:', ls_break-cell_row,
+             'column:', ls_break-cell_column.
+ENDLOOP.
+```
+
+#### Combining Page Breaks with Print Area
+
+```abap
+" Typical pattern: restrict print area, add section breaks
+lo_page_setup->set_paper_size( zcl_excel_sheet_setup=>c_papersize_a4 ).
+lo_page_setup->set_orientation( zcl_excel_sheet_setup=>c_orientation_portrait ).
+lo_worksheet->set_print_area( 'A1:H100' ).
+
+" Add breaks every 30 data rows
+DATA(lv_break_row) = 31.  " Row 1 = header; rows 2-30 = first page
+WHILE lv_break_row <= 100.
+  lo_worksheet->page_breaks->add_pagebreak( ip_column = 'A'  ip_row = lv_break_row ).
+  ADD 30 TO lv_break_row.
+ENDWHILE.
+```
+
 ### Freeze Panes
 
 ```abap
@@ -187,15 +244,15 @@ lo_row->set_outline_level( 1 ).
 ```abap
 " Create collapsible groups by setting outline levels
 
-" Group rows 5–10 at level 1 (one '+' button in the margin)
+" Group rows 5-10 at level 1 (one '+' button in the margin)
 DATA: lv_row TYPE i.
 DO 6 TIMES.
-  lv_row = 4 + sy-index.  " sy-index runs 1..6 → rows 5..10
+  lv_row = 4 + sy-index.  " sy-index runs 1..6 -> rows 5..10
   lo_row = lo_worksheet->get_row( lv_row ).
   lo_row->set_outline_level( 1 ).
 ENDDO.
 
-" Group columns C–F at level 1
+" Group columns C-F at level 1
 DATA: lv_col_alpha TYPE string.
 DATA: lv_columns   TYPE TABLE OF string.
 APPEND 'C' TO lv_columns.
@@ -368,7 +425,7 @@ DATA: lo_sheet_view TYPE REF TO zcl_excel_sheet_view.
 
 lo_sheet_view = lo_worksheet->get_sheet_view( ).
 
-" Zoom percentage — valid range is roughly 10–400
+" Zoom percentage — valid range is roughly 10-400
 lo_sheet_view->set_zoom_scale( 125 ).  " 125% zoom
 
 " View type controls the ruler/page-break overlay shown in Excel
@@ -461,6 +518,8 @@ After mastering worksheet management:
 - **[Charts and Graphs](/guide/charts)** - Create visual representations
 - **[Data Conversion](/guide/data-conversion)** - Efficiently populate worksheets with ABAP data
 - **[Reading Excel](/guide/reading-excel)** - Read back and process existing workbooks
+- **[AutoFilter](/guide/autofilter)** - Add drop-down column filters
+- **[Template Filling](/guide/template-filling)** - Fill pre-designed Excel templates
 - **[Changelog](/guide/changelog)** - Full history of recent changes
 
 ## Common Worksheet Patterns
