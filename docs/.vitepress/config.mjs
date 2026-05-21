@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  ignoreDeadLinks: true, // Ignores all dead links during build
+  ignoreDeadLinks: true,
   title: 'abap2xlsx Documentation',
   description: 'Documentation for abap2xlsx, a library for generating and manipulating Excel files in ABAP.',
   base: '/abap2xlsx-docs/',
@@ -11,9 +11,7 @@ export default defineConfig({
       pattern: 'https://github.com/kartefact/abap2xlsx-docs/tree/main/docs/:path',
       text: 'Edit this page on GitHub'
     },
-    search: {
-      provider: 'local'
-    },
+    search: { provider: 'local' },
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Getting Started', link: '/getting-started/getting-started-for-beginners' },
@@ -42,6 +40,7 @@ export default defineConfig({
           { text: 'ALV Integration', link: '/guide/alv-integration' },
           { text: 'Charts', link: '/guide/charts' },
           { text: 'Cloud Compatibility', link: '/guide/cloud-compatibility' },
+          { text: 'CSV Export', link: '/guide/csv-export' },
           { text: 'Data Conversion', link: '/guide/data-conversion' },
           { text: 'Formatting', link: '/guide/formatting' },
           { text: 'Formulas', link: '/guide/formulas' },
@@ -97,6 +96,7 @@ export default defineConfig({
           { text: 'Development Setup', link: '/contributing/development-setup' },
           { text: 'Documentation', link: '/contributing/documentation' },
           { text: 'Publishing a New Release', link: '/contributing/publishing-a-new-release' },
+          { text: 'Security Policy', link: '/contributing/security' },
           { text: 'Testing', link: '/contributing/testing' },
         ],
       },
@@ -134,10 +134,8 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/kartefact/abap2xlsx-docs' },
     ],
     footer: {
-      message: `
-      <a href="/LICENSE">License</a> |
-      <a href="/docs/resources/contact">Contact</a>`,
-      copyright: `Copyright © 2010-${new Date().getFullYear()} abap2xlsx Contributors`,
+      message: '<a href="/LICENSE">License</a> | <a href="/docs/resources/contact">Contact</a>',
+      copyright: `Copyright (c) 2010-${new Date().getFullYear()} abap2xlsx Contributors`,
     },
   },
 })
