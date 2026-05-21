@@ -13,18 +13,29 @@ DATA: lo_excel     TYPE REF TO zcl_excel,
       lo_worksheet TYPE REF TO zcl_excel_worksheet,
       lo_writer    TYPE REF TO zif_excel_writer.
 
+" 1. Create the workbook
 CREATE OBJECT lo_excel.
+
+" 2. Add (or get) the active worksheet
 lo_worksheet = lo_excel->add_new_worksheet( ).
+
+" 3. Choose a writer — zcl_excel_writer_2007 produces .xlsx
 CREATE OBJECT lo_writer TYPE zcl_excel_writer_2007.
+
+" 4. Serialise the workbook to an XSTRING
 DATA(lv_file) = lo_writer->write_file( lo_excel ).
 ```
 
 ### Understanding Cell References
 
 ```abap
+" Column is always an alpha string ('A', 'B', ..., 'AA', 'AB', ...)
+" Row is a 1-based integer
 lo_worksheet->set_cell( ip_column = 'A'  ip_row = 1 ip_value = 'Cell A1' ).
 lo_worksheet->set_cell( ip_column = 'B'  ip_row = 1 ip_value = 'Cell B1' ).
-lo_worksheet->set_cell( ip_column = 'AA' ip_row = 1 ip_value = 'Cell AA1' ).
+lo_worksheet->set_cell( ip_column = 'AA' ip_row = 1 ip_value = 'Cell AA1' ).  " Two-letter columns work fine
+
+" Reading back a cell value always returns a string
 DATA(lv_value) = lo_worksheet->get_cell( ip_column = 'A' ip_row = 1 ).
 ```
 
@@ -38,17 +49,24 @@ DATA: lo_excel     TYPE REF TO zcl_excel,
       lo_writer    TYPE REF TO zif_excel_writer.
 
 START-OF-SELECTION.
+  " Create the top-level workbook object
   CREATE OBJECT lo_excel.
+
+  " get_active_worksheet returns the first sheet (auto-created by zcl_excel)
   lo_worksheet = lo_excel->get_active_worksheet( ).
   lo_worksheet->set_title( 'My Data' ).
 
+  " Write a header row
   lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Product' ).
   lo_worksheet->set_cell( ip_column = 'B' ip_row = 1 ip_value = 'Quantity' ).
   lo_worksheet->set_cell( ip_column = 'C' ip_row = 1 ip_value = 'Price' ).
+
+  " Write a data row
   lo_worksheet->set_cell( ip_column = 'A' ip_row = 2 ip_value = 'Laptop' ).
   lo_worksheet->set_cell( ip_column = 'B' ip_row = 2 ip_value = 10 ).
   lo_worksheet->set_cell( ip_column = 'C' ip_row = 2 ip_value = '999.99' ).
 
+  " Serialise and confirm
   CREATE OBJECT lo_writer TYPE zcl_excel_writer_2007.
   DATA(lv_excel_file) = lo_writer->write_file( lo_excel ).
   MESSAGE 'Excel file created successfully' TYPE 'S'.
@@ -66,12 +84,21 @@ DATA: lv_string  TYPE string    VALUE 'Text Value',
       lv_time    TYPE t         VALUE '143000',
       lv_boolean TYPE abap_bool VALUE abap_true.
 
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = lv_string ).   " Text
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 2 ip_value = lv_integer ).  " Number
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 3 ip_value = lv_decimal ).  " Decimal
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 4 ip_value = lv_date ).     " Date
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 5 ip_value = lv_time ).     " Time
-lo_worksheet->set_cell( ip_column = 'A' ip_row = 6 ip_value = lv_boolean ).  " Boolean
+" Strings are stored as-is in the shared strings table
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = lv_string ).
+
+" Integer / packed-decimal numbers are written as numeric cells
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 2 ip_value = lv_integer ).
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 3 ip_value = lv_decimal ).
+
+" ABAP date (YYYYMMDD) is converted to Excel serial date automatically
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 4 ip_value = lv_date ).
+
+" ABAP time (HHMMSS) is stored as an Excel time fraction
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 5 ip_value = lv_time ).
+
+" abap_true / abap_false map to Excel Boolean TRUE / FALSE
+lo_worksheet->set_cell( ip_column = 'A' ip_row = 6 ip_value = lv_boolean ).
 ```
 
 ### set_cell XSTRING Support
@@ -80,16 +107,16 @@ lo_worksheet->set_cell( ip_column = 'A' ip_row = 6 ip_value = lv_boolean ).  " B
 
 ```abap
 DATA lv_xstr TYPE xstring.
-" ... populate lv_xstr from a stream or function module ...
+" Populate lv_xstr from any binary source (MIME repository, file upload, etc.)
+" ... populate lv_xstr ...
 
 lo_worksheet->set_cell(
   ip_column = 'A'
   ip_row    = 1
-  ip_value  = lv_xstr   " XSTRING now accepted directly
+  ip_value  = lv_xstr   " XSTRING is now accepted — no prior string conversion needed
 ).
+" When reading back, retrieve the cell as a string and apply hex-to-binary conversion
 ```
-
-The value is stored as-is in the cell's internal representation. When reading the file back, retrieve the cell value as a string and apply your own hex-to-binary conversion if needed.
 
 ## Working with Internal Tables
 
@@ -105,13 +132,14 @@ TYPES: BEGIN OF ty_sales,
        END OF ty_sales.
 DATA lt_sales TYPE TABLE OF ty_sales.
 
-" Headers
+" --- Header row (row 1) ---
 lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Region' ).
 lo_worksheet->set_cell( ip_column = 'B' ip_row = 1 ip_value = 'Product' ).
 lo_worksheet->set_cell( ip_column = 'C' ip_row = 1 ip_value = 'Quantity' ).
 lo_worksheet->set_cell( ip_column = 'D' ip_row = 1 ip_value = 'Revenue' ).
 lo_worksheet->set_cell( ip_column = 'E' ip_row = 1 ip_value = 'Sale Date' ).
 
+" --- Data rows start at row 2 ---
 DATA(lv_row) = 2.
 LOOP AT lt_sales INTO DATA(ls).
   lo_worksheet->set_cell( ip_column = 'A' ip_row = lv_row ip_value = ls-region ).
@@ -119,20 +147,22 @@ LOOP AT lt_sales INTO DATA(ls).
   lo_worksheet->set_cell( ip_column = 'C' ip_row = lv_row ip_value = ls-quantity ).
   lo_worksheet->set_cell( ip_column = 'D' ip_row = lv_row ip_value = ls-revenue ).
   lo_worksheet->set_cell( ip_column = 'E' ip_row = lv_row ip_value = ls-sale_date ).
-  ADD 1 TO lv_row.
+  ADD 1 TO lv_row.  " Advance to next row
 ENDLOOP.
 ```
 
 ### Using bind_table (Recommended)
 
 ```abap
+" bind_table writes headers + data rows in one call and optionally
+" wraps the range as a styled Excel table (ListObject)
 lo_worksheet->bind_table(
   ip_table          = lt_sales
   is_table_settings = VALUE #(
     top_left_column  = 'A'
     top_left_row     = 1
-    table_style      = zcl_excel_table=>builtinstyle_medium2
-    show_row_stripes = abap_true
+    table_style      = zcl_excel_table=>builtinstyle_medium2  " Named built-in table style
+    show_row_stripes = abap_true                              " Alternating row shading
   )
 ).
 ```
@@ -143,33 +173,39 @@ lo_worksheet->bind_table(
 DATA: lo_summary TYPE REF TO zcl_excel_worksheet,
       lo_detail  TYPE REF TO zcl_excel_worksheet.
 
+" Each call to add_new_worksheet appends a tab at the right
 lo_summary = lo_excel->add_new_worksheet( ).
 lo_summary->set_title( 'Summary' ).
 
 lo_detail = lo_excel->add_new_worksheet( ).
 lo_detail->set_title( 'Detailed Data' ).
 
+" Make 'Summary' the active sheet when the file opens (1-based index)
 lo_excel->set_active_sheet_index( 1 ).
 
-" Print layout
+" --- Print layout options ---
 lo_worksheet->sheet_setup->set_orientation( zcl_excel_sheet_setup=>c_orientation_landscape ).
 lo_worksheet->sheet_setup->set_paper_size( zcl_excel_sheet_setup=>c_papersize_a4 ).
+
+" Freeze the first header row and the first column so they stay visible while scrolling
 lo_worksheet->freeze_panes( ip_num_rows = 1 ip_num_columns = 1 ).
 ```
 
 ## File Output Options
 
 ```abap
-" Standard Excel 2007+ (.xlsx)
+" Standard Excel 2007+ format — produces a .xlsx (ZIP-based OOXML) file
 CREATE OBJECT lo_writer TYPE zcl_excel_writer_2007.
 DATA(lv_xlsx) = lo_writer->write_file( lo_excel ).
 
-" CSV - see the CSV Export guide for advanced options (skip hidden rows/cols)
+" CSV — only the active worksheet, plain text output
+" See the CSV Export guide for advanced options (skip hidden rows/cols)
 DATA lo_csv TYPE REF TO zcl_excel_writer_csv.
 CREATE OBJECT lo_csv.
 DATA(lv_csv) = lo_csv->write_file( lo_excel ).
 
-" Huge file writer - memory-efficient for very large datasets
+" Huge-file writer — streams rows one by one to avoid memory exhaustion
+" on very large datasets (100k+ rows); does not support all formatting features
 DATA lo_huge TYPE REF TO zcl_excel_writer_huge_file.
 CREATE OBJECT lo_huge.
 DATA(lv_huge) = lo_huge->write_file( lo_excel ).
@@ -184,9 +220,12 @@ TRY.
     CREATE OBJECT lo_excel.
     lo_worksheet = lo_excel->add_new_worksheet( ).
     lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Test' ).
+
     CREATE OBJECT lo_writer TYPE zcl_excel_writer_2007.
     DATA(lv_result) = lo_writer->write_file( lo_excel ).
+
   CATCH zcx_excel INTO DATA(lx_excel).
+    " zcx_excel is the base exception class for all abap2xlsx errors
     MESSAGE |Excel error: { lx_excel->get_text( ) }| TYPE 'E'.
 ENDTRY.
 ```

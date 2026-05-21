@@ -9,6 +9,7 @@ DATA: lo_excel     TYPE REF TO zcl_excel,
       lo_worksheet TYPE REF TO zcl_excel_worksheet,
       lo_writer    TYPE REF TO zcl_excel_writer_csv.
 
+" Build a minimal workbook with two columns and one data row
 CREATE OBJECT lo_excel.
 lo_worksheet = lo_excel->get_active_worksheet( ).
 lo_worksheet->set_cell( ip_column = 'A' ip_row = 1 ip_value = 'Name' ).
@@ -16,8 +17,10 @@ lo_worksheet->set_cell( ip_column = 'B' ip_row = 1 ip_value = 'Score' ).
 lo_worksheet->set_cell( ip_column = 'A' ip_row = 2 ip_value = 'Alice' ).
 lo_worksheet->set_cell( ip_column = 'B' ip_row = 2 ip_value = 95 ).
 
+" Instantiate the CSV writer and serialise
 CREATE OBJECT lo_writer.
 DATA(lv_csv) = lo_writer->write_file( lo_excel ).
+" lv_csv is an XSTRING containing the UTF-8-encoded CSV
 ```
 
 The result is an `XSTRING` containing the UTF-8-encoded CSV.
@@ -25,7 +28,8 @@ The result is an `XSTRING` containing the UTF-8-encoded CSV.
 ## Configuring the Delimiter
 
 ```abap
-" Default is comma. Change to semicolon for European locales:
+" Default delimiter is a comma.
+" Switch to semicolon for European locales where comma is the decimal separator:
 lo_writer->set_separator( ';' ).
 ```
 
@@ -37,6 +41,7 @@ Two new options control whether hidden rows/columns are included in the output. 
 
 ```abap
 CREATE OBJECT lo_writer.
+" Exclude rows/columns whose visible flag is set to abap_false
 lo_writer->set_skip_hidden_rows( abap_true ).
 lo_writer->set_skip_hidden_columns( abap_true ).
 DATA(lv_csv) = lo_writer->write_file( lo_excel ).
@@ -47,6 +52,7 @@ DATA(lv_csv) = lo_writer->write_file( lo_excel ).
 ```abap
 DATA lo_csv TYPE REF TO zcl_excel_writer_csv.
 CREATE OBJECT lo_csv.
+" Mirror the user's ALV column visibility in the CSV output
 lo_csv->set_skip_hidden_columns( abap_true ).
 lo_csv->set_skip_hidden_rows( abap_true ).
 DATA(lv_file) = lo_csv->write_file( lo_excel ).
@@ -66,6 +72,7 @@ Prior to the Jan 2025 fix, a mismatch between the user logon language and the En
 The CSV writer operates on the **active worksheet only**. Set the active sheet before writing if your workbook contains multiple sheets:
 
 ```abap
+" Switch to the second tab before writing — CSV will contain only that sheet's data
 lo_excel->set_active_sheet_index( 2 ).
 DATA(lv_csv) = lo_csv->write_file( lo_excel ).
 ```
